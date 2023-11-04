@@ -1,0 +1,33 @@
+\documentclass[a4paper]{extarticle}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  filecolor=magenta,
+  urlcolor=blue,
+  pdfpagemode=FullScreen,
+}
+
+\begin{document}
+
+\newcommand{\abs}[1]{\vert #1\vert}
+\newcommand{\norm}[1]{\vert\vert #1\vert\vert}
+\newcommand{\floor}[1]{\lfloor #1\rfloor}
+\newcommand{\ceil}[1]{\lceil #1\rceil}
+
+\section{Source-Set Selection Problem}
+
+The Markov Decision Problem formulation is as follows $M \triangleq (S, A, T, R, \gamma)$:
+\begin{itemize}
+  \item States $S$: A binary vector where the $i$-th element is 1 iff $x_i$ is included in the source set.
+  \item Actions $A$: Including or removing a node from the source set.
+  \item Reward function: Quantifies the skew of the PD-tree based on the source set $R(s, a, s')$
+  \item Transition function $T: S \times A \times S \rightarrow [0, 1]$
+\end{itemize}
+
+Observe, act and receive feedback. The agent's goal is to learn a policy that lets the agent accumulates the highest possible reward over time.
+\end{document}

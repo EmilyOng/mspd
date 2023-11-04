@@ -1,0 +1,5 @@
+.DS_Store
+build/
+*.synctex.gz
+.ipynb_checkpoints
+__pycache__
