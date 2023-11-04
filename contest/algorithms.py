@@ -7,7 +7,7 @@ def genetic_algorithm(N, objectiveN, inputDf):
     generations = 100
     population_size = 20
     crossover_rate = 0.7
-    mutation_rate = 0.05
+    mutation_rate = 0.4
     tournament_size = 5
 
     fitness_store = {}

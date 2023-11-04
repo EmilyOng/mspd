@@ -87,7 +87,6 @@ for n in [10, 15]:#, 25, 30, 40, 45, 50]:
 
     # there will be hidden testcases (200 more nets)
     for netIdx in range(0, 300):
-        print(netIdx)
         netInputDf = inputDf.loc[inputDf["netIdx"] == netIdx]
         netDataObjDf = dataObjDf.loc[dataObjDf["netIdx"] == netIdx]
 
