@@ -4,11 +4,11 @@ from mspd import solve
 
 def genetic_algorithm(N, objectiveN, inputDf):
     # Settings
-    generations = 100
-    population_size = 20
+    generations = 400
+    population_size = 100
     crossover_rate = 0.7
-    mutation_rate = 0.4
-    tournament_size = 5
+    mutation_rate = 0.2
+    tournament_size = 20
 
     fitness_store = {}
 
@@ -19,7 +19,8 @@ def genetic_algorithm(N, objectiveN, inputDf):
 
         wl, skew = solve(N, chromosome, inputDf)
         fitness_store[tuple(chromosome)] = -skew
-        return -skew
+        objective = 0.2 * (wl + skew) + 0.4 * (3 * wl + skew) + 0.4 * (wl + 3 * skew)
+        return -objective
 
 
     def tournament_selection(population):

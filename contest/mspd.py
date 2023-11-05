@@ -405,11 +405,18 @@ def solve(N, source_set, input_df):
     points = [((X[i], Y[i]), i) for i in range(N)]
 
     nearest_neighbours = get_nearest_neighbours(points)
+    alpha_values = [0.2, 0.4, 0.6, 0.8]
 
-    alpha = 0.4
+    best = None
 
-    adj_list, parents = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
-    wl = calc_wl(adj_list, points)
-    skew = calc_skew(adj_list, points, N)
+    for alpha in alpha_values:
+        adj_list, parents = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
+        wl = calc_wl(adj_list, points)
+        skew = calc_skew(adj_list, points, N)
+        if best is None:
+            best = (wl, skew)
+        else:
+            if wl >= best[0] and skew >= best[1]:
+                best = (wl, skew)
 
-    return wl, skew
+    return best
