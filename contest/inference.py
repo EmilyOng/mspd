@@ -3,7 +3,7 @@ import random
 import signal
 from sklearn.metrics import mean_squared_error
 
-from algorithms import genetic_algorithm
+from genetic import GeneticAgent
 
 # contestants are only allowed to modify the following function!
 # input: a) number of coordinates(N: 10, 15, 20, ... 50),
@@ -29,8 +29,8 @@ def Inference(N, objectiveN, inputDf):
     # Note that the root of the input net (always index 0) cannot be a source
     # please return index between 1 and N-1
 
-    result = genetic_algorithm(N, objectiveN, inputDf)
-    return result
+    genetic_agent = GeneticAgent(N, objectiveN, inputDf)
+    return genetic_agent.select_best_vertices()
 
 
 ######### DO NOT MODIFY FROM HERE ONWARD ############

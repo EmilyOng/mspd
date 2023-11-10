@@ -2,7 +2,7 @@ import random
 from mspd import solve
 
 
-def genetic_algorithm(N, objectiveN, inputDf):
+class GeneticAgent:
     # Settings
     generations = 400
     population_size = 100
@@ -10,28 +10,34 @@ def genetic_algorithm(N, objectiveN, inputDf):
     mutation_rate = 0.2
     tournament_size = 20
 
-    fitness_store = {}
+    def __init__(self, N, objectiveN, inputDf):
+        self.N = N
+        self.objectiveN = objectiveN
+        self.inputDf = inputDf
 
-    def fitness(chromosome):
+        self.fitness_store = {}
+
+
+    def fitness(self, chromosome):
         # Compute the fitness (score) of each chromosome as the skew value in the constructed PD tree
-        if tuple(chromosome) in fitness_store:
-            return fitness_store[tuple(chromosome)]
+        if tuple(chromosome) in self.fitness_store:
+            return self.fitness_store[tuple(chromosome)]
 
-        wl, skew = solve(N, chromosome, inputDf)
-        fitness_store[tuple(chromosome)] = -skew
+        wl, skew = solve(self.N, chromosome, self.inputDf)
+        self.fitness_store[tuple(chromosome)] = -skew
         objective = 0.2 * (wl + skew) + 0.4 * (3 * wl + skew) + 0.4 * (wl + 3 * skew)
         return -objective
 
 
-    def tournament_selection(population):
+    def tournament_selection(self, population):
         # Select the top parent from a randomised sample
-        return max(random.sample(population, tournament_size), key=fitness)
+        return max(random.sample(population, GeneticAgent.tournament_size), key=self.fitness)
 
 
-    def crossover(parent1, parent2):
+    def crossover(self, parent1, parent2):
         gene_length = len(parent1)
 
-        if gene_length <= 1 or random.random() < crossover_rate:
+        if gene_length <= 1 or random.random() < GeneticAgent.crossover_rate:
             return parent1, parent2
 
         # Create a child chromosome by combining genes from two parent chromosomes
@@ -54,7 +60,6 @@ def genetic_algorithm(N, objectiveN, inputDf):
             else:
                 child1.append(next(parent2_remaining_genes))
 
-
         # Create the second child
         child2 = []
         parent2_middle_genes = parent2[middle_section_begin:middle_section_end + 1]
@@ -69,13 +74,13 @@ def genetic_algorithm(N, objectiveN, inputDf):
         return child1, child2
 
 
-    def mutate(chromosome):
-        if random.random() < mutation_rate:
+    def mutate(self, chromosome):
+        if random.random() < GeneticAgent.mutation_rate:
             return chromosome
 
         mutation_index = random.randint(0, len(chromosome) - 1)
         while True:
-            new_source = random.choice(range(1, N))
+            new_source = random.choice(range(1, self.N))
             if new_source in chromosome:
                 # Note that the length of chromosome is again at most 3.
                 continue
@@ -86,20 +91,31 @@ def genetic_algorithm(N, objectiveN, inputDf):
         return chromosome
 
 
-    population = [sorted(random.sample(range(1, N), objectiveN)) for i in range(population_size)]
-    best_chromosomes = []
+    def select_best_vertices(self):
+        population = [sorted(random.sample(range(1, self.N), self.objectiveN)) for i in range(GeneticAgent.population_size)]
+        best_chromosomes = []
 
-    for generation in range(generations):
-        # Populate the next generation
-        selected_parents = [tournament_selection(population) for _ in range(population_size)]
-        next_generation = []
+        for generation in range(GeneticAgent.generations):
+            # Populate the next generation
+            selected_parents = [self.tournament_selection(population) for _ in range(GeneticAgent.population_size)]
+            next_generation = []
 
-        for i in range(0, population_size, 2):
-            parent1, parent2 = selected_parents[i], selected_parents[i + 1]
-            for child in crossover(parent1, parent2):
-                next_generation.append(sorted(mutate(child)))
+            for i in range(0, GeneticAgent.population_size, 2):
+                parent1, parent2 = selected_parents[i], selected_parents[i + 1]
+                for child in self.crossover(parent1, parent2):
+                    next_generation.append(sorted(self.mutate(child)))
 
-        population = next_generation
-        best_chromosomes.append(max(population, key=fitness))
+            population = next_generation
+            best_chromosomes.append(max(population, key=self.fitness))
 
-    return max(best_chromosomes, key=fitness)
+        return max(best_chromosomes, key=self.fitness)
+
+
+
+# import pandas as pd
+#
+# inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
+#
+#
+# genetic_agent = GeneticAgent(45, 2, inputDf[inputDf["netIdx"] == 299])
+# print(genetic_agent.select_best_vertices())
