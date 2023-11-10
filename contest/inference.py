@@ -4,6 +4,7 @@ import signal
 from sklearn.metrics import mean_squared_error
 
 from genetic import GeneticAgent
+from qlearning import QLearningAgent
 
 # contestants are only allowed to modify the following function!
 # input: a) number of coordinates(N: 10, 15, 20, ... 50),
@@ -29,8 +30,10 @@ def Inference(N, objectiveN, inputDf):
     # Note that the root of the input net (always index 0) cannot be a source
     # please return index between 1 and N-1
 
-    genetic_agent = GeneticAgent(N, objectiveN, inputDf)
-    return genetic_agent.select_best_vertices()
+    # genetic_agent = GeneticAgent(N, objectiveN, inputDf)
+    # return genetic_agent.select_best_vertices()
+    q_agent = QLearningAgent(N, objectiveN, inputDf)
+    return q_agent.select_best_vertices()
 
 
 ######### DO NOT MODIFY FROM HERE ONWARD ############

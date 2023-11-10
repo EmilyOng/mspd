@@ -72,6 +72,9 @@ class QLearningAgent:
             index = BitTwiddling.bitscan_lsb(possible_vertices)
             possible_vertices = BitTwiddling.pop_lsb(possible_vertices)
 
+            if index == 0: # Do not include the root
+                continue
+
             next_state = state | (1 << index) # Inefficient
             neighbours.append((next_state, index))
 
@@ -103,9 +106,6 @@ class QLearningAgent:
 
 
     def update_q_table(self, prev_state, prev_action, current_state, reward_signal):
-        # Next actions from the current state
-        neighbours = self.get_neighbours(current_state)
-
         # Reference: AIMA 4.0, Page 854 (Q-Learning Agent)
         if prev_state != 0:
             if (prev_state, prev_action) in self.N_sa:
@@ -113,28 +113,31 @@ class QLearningAgent:
             else:
                 self.N_sa[(prev_state, prev_action)] = 1
 
+            # Next actions from the current state
+            neighbours = self.get_neighbours(current_state)
+
             max_Q = 0 if len(neighbours) == 0 else\
-                max(neighbours, key=lambda neighbour: self.get_Q(current_state, neighbour[1]))
+                max(map(lambda neighbour: self.get_Q(current_state, neighbour[1]), neighbours))
 
             # Estimate the new Q-value
             self.Q[(prev_state, prev_action)] = \
                 self.get_Q(prev_state, prev_action) +\
-                QLearningAgent.learning_rate * (self.N_sa[(prev_state, prev_action)]) *\
+                QLearningAgent.learning_rate * self.N_sa[(prev_state, prev_action)] *\
                 (reward_signal + QLearningAgent.discount_factor * max_Q - self.get_Q(prev_state, prev_action))
-
-        is_terminal = len(neighbours) == 0
-        return is_terminal
 
 
     def choose_action(self, state):
         neighbours = self.get_neighbours(state)
+        if len(neighbours) == 0:
+            return None
+
         if random.random() <= self.exploration_prob:
             # Exploration: Choose a random action
             return random.choice(neighbours)[1]
         else:
             # Exploitation: Choose an action with the highest Q-value for
             # the current state
-            best_action, best_score = None, -1
+            best_action, best_score = None, float("-inf")
             for _, action in neighbours:
                 score = self.f(self.get_Q(state, action), self.get_N(state, action))
                 if score >= best_score:
@@ -160,13 +163,13 @@ class QLearningAgent:
 
             while True:
                 action = self.choose_action(state)
+                if action is None: # Terminal state
+                    break
                 new_state = self.perform_action(state, action)
                 reward = self.get_reward(new_state)
 
-                is_terminal = self.update_q_table(state, action, new_state, reward)
+                self.update_q_table(state, action, new_state, reward)
                 total_reward += reward
-                if is_terminal:
-                    break
 
                 state = new_state
 
@@ -183,7 +186,7 @@ class QLearningAgent:
 
         while len(vertices) < self.objectiveN:
             neighbours = self.get_neighbours(state)
-            best_action, best_Q_value = None, -1
+            best_action, best_Q_value = None, float("-inf")
             for _, action in neighbours:
                 Q_value = self.get_Q(state, action)
                 if Q_value >= best_Q_value:
