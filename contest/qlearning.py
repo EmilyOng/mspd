@@ -1,4 +1,5 @@
 import random
+from mspd import solve
 
 
 class BitTwiddling:
