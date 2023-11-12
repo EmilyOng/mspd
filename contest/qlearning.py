@@ -33,7 +33,7 @@ class QEnvironment:
 
 
     def get_actions(self):
-        return np.where(self.selectable_vertices)
+        return np.where(self.selectable_vertices)[0]
 
 
     def reset(self):
@@ -67,10 +67,10 @@ class QLearningAgent:
         self.min_exploration_prob = 0.1
         # Settings
         self.learning_rate = 0.3
-        self.discount_factor = 0.8
+        self.discount_factor = 0.5
         self.visit_threshold = 3
         self.optimistic_estimate = 1
-        self.num_episodes = 300
+        self.num_episodes = 100
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
@@ -93,7 +93,7 @@ class QLearningAgent:
 
             # Get actions in the new state
             actions = self.environment.get_actions()
-            best_action = max(actions, lambda action: self.Q[new_state][action])
+            best_action = max(actions, key=lambda action: self.Q[new_state][action])
             # Estimate the new Q-value
             self.Q[state][action] = \
                 self.Q[state][action] + self.learning_rate * self.N_sa[state][action] *\
@@ -103,7 +103,7 @@ class QLearningAgent:
     def choose_action(self):
         if random.random() <= self.exploration_prob:
             # Exploration: Choose a random action
-            return random.choice(self.environment.get_actions())
+            return np.random.choice(self.environment.get_actions())
         else:
             # Exploitation: Choose an action with the highest Q-value for the
             # current state
@@ -129,7 +129,7 @@ class QLearningAgent:
                 action = self.choose_action()
 
                 new_state, reward, done = self.environment.step(action)
-                self.update_q_table(state, action, reward)
+                self.update_q_table(state, action, new_state, reward)
                 episode_reward += reward
 
                 if done:
@@ -142,7 +142,7 @@ class QLearningAgent:
                 self.exploration_prob * self.exploration_decay
             )
 
-            # print(f"Episode {episode + 1}: {episode_reward}", self.environment.selected_vertices)
+            print(f"Episode {episode + 1}: {episode_reward}", self.environment.selected_vertices)
             rewards.append(episode_reward)
         return rewards
 
