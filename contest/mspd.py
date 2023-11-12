@@ -410,9 +410,15 @@ def solve(N, source_set, input_df):
     best = None
 
     for alpha in alpha_values:
-        adj_list, parents = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
-        wl = calc_wl(adj_list, points)
-        skew = calc_skew(adj_list, points, N)
+        # Calculate the normalized values
+        n_adj_list, _ = prim_dijkstra(alpha, points, [], nearest_neighbours, False)
+        n_wl = calc_wl(n_adj_list, points)
+        n_skew = calc_skew(n_adj_list, points, N)
+
+        adj_list, _ = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
+        wl = calc_wl(adj_list, points) / n_wl
+        skew = calc_skew(adj_list, points, N) / n_skew
+
         if best is None:
             best = (wl, skew)
         else:

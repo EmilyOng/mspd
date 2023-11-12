@@ -1,175 +1,139 @@
 import random
+import numpy as np
 from mspd import solve
 
 
-class BitTwiddling:
-    @staticmethod
-    def bitscan_lsb(bits):
-        # Referenced from: https://stackoverflow.com/questions/5520655/return-index-of-least-significant-bit-in-python
-        # Index of the least significant bit
-        return (bits & -bits).bit_length() - 1
-
-    @staticmethod
-    def pop_lsb(bits):
-        # Removes the least significant bit from the given binary
-        return bits & ~(bits & -bits)
-
-    @staticmethod
-    def population_count(bits):
-        # https://www.chessprogramming.org/Population_Count
-        count = 0
-        while bits:
-            count += 1
-            bits &= (bits - 1)
-        return count
-
-    @staticmethod
-    def get_on_bits(bits):
-        on_bits = []
-        while bits:
-            on_bits.append(BitTwiddling.bitscan_lsb(bits))
-            bits = BitTwiddling.pop_lsb(bits)
-        return on_bits
-
-
-class QLearningAgent:
-    # Settings
-    learning_rate = 0.5
-    discount_factor = 0.5
-    visit_threshold = 5
-    optimistic_estimate = float("inf")
-    num_episodes = 100
-
-
+class QEnvironment:
     def __init__(self, N, objectiveN, inputDf):
         self.N = N
         self.objectiveN = objectiveN
         self.inputDf = inputDf
 
-        self.bitmask = (1 << N) - 1
+        self.n_states = N
+        self.n_actions = N
+
+        # Include 0 as the initial starting point.
+        self.selected_vertices = [0]
+        # All vertices except the root (0) is selectable initially.
+        self.selectable_vertices = np.full(self.N, True)
+        self.selectable_vertices[0] = False
+        self.previous_reward = 0
+
+
+    def get_state(self):
+        return self.selected_vertices[-1]
+
+
+    def get_reward(self):
+        wl, skew = solve(self.N, self.selected_vertices[1:], self.inputDf)
+        objective = wl + skew
+        new_reward = (1 / objective) - self.previous_reward
+        self.previous_reward = new_reward
+        return new_reward
+
+
+    def get_actions(self):
+        return np.where(self.selectable_vertices)
+
+
+    def reset(self):
+        self.selected_vertices = [0]
+        self.previous_reward = 0
+        self.selectable_vertices = np.full(self.N, True)
+        self.selectable_vertices[0] = False
+
+        return self.get_state()
+
+
+    def step(self, vertex):
+        self.selected_vertices.append(vertex)
+        self.selectable_vertices[vertex] = False
+
+        new_state = self.get_state()
+        reward = self.get_reward()
+        done = len(self.selected_vertices) - 1 == self.objectiveN
+
+        return new_state, reward, done
+
+
+
+class QLearningAgent:
+    def __init__(self, environment):
+        self.environment = environment
 
         # Exploitation vs exploration tradeoff when selecting actions during training.
-        self.exploration_prob = 1.0
-        self.exploration_decay = 0.9
+        self.exploration_prob = 1
+        self.exploration_decay = 0.99
         self.min_exploration_prob = 0.1
+        # Settings
+        self.learning_rate = 0.3
+        self.discount_factor = 0.8
+        self.visit_threshold = 3
+        self.optimistic_estimate = 1
+        self.num_episodes = 300
 
-        # Persistent
-        self.Q = {} # A table of action values indexed by state and action, initially 0
-        self.N_sa = {} # A table of frequencies for state-action pairs, initialy 0
-
-
-    # Each state is represented as a N-length bit vector with at most
-    # objectiveN bits turned on. An action = k involves turning on the
-    # k-th bit.
-    def get_neighbours(self, state):
-        num_vertices = BitTwiddling.population_count(state)
-        if num_vertices == self.objectiveN:
-            return []
-
-        possible_vertices = self.bitmask & (~state)
-        neighbours = []
-        while possible_vertices:
-            index = BitTwiddling.bitscan_lsb(possible_vertices)
-            possible_vertices = BitTwiddling.pop_lsb(possible_vertices)
-
-            if index == 0: # Do not include the root
-                continue
-
-            next_state = state | (1 << index) # Inefficient
-            neighbours.append((next_state, index))
-
-        return neighbours
-
-
-    def get_Q(self, state, action):
-        if (state, action) in self.Q:
-            return self.Q[(state, action)]
-
-        # Q-table values are initialized to 0
-        self.Q[(state, action)] = 0
-        return 0
-
-
-    def get_N(self, state, action):
-        if (state, action) in self.N_sa:
-            return self.N_sa[(state, action)]
-
-        self.N_sa[(state, action)] = 0
-        return 0
+        # Q(s, a) is the expected total discounted reward if the agent takes action
+        # a in state s and acts optimally after. Initially 0.
+        self.Q = np.zeros((self.environment.n_states, self.environment.n_actions))
+        # A table of frequencies for state-action pairs, initialy 0
+        self.N_sa = np.zeros((self.environment.n_states, self.environment.n_actions))
 
 
     def f(self, utility, num_visits): # Exploration function
-        if num_visits < QLearningAgent.visit_threshold:
-            return QLearningAgent.optimistic_estimate
+        if num_visits < self.visit_threshold:
+            return self.optimistic_estimate
         else:
             return utility
 
 
-    def update_q_table(self, prev_state, prev_action, current_state, reward_signal):
+    def update_q_table(self, state, action, new_state, reward_signal):
         # Reference: AIMA 4.0, Page 854 (Q-Learning Agent)
-        if prev_state != 0:
-            if (prev_state, prev_action) in self.N_sa:
-                self.N_sa[(prev_state, prev_action)] += 1
-            else:
-                self.N_sa[(prev_state, prev_action)] = 1
+        if state is not None:
+            self.N_sa[state][action] += 1
 
-            # Next actions from the current state
-            neighbours = self.get_neighbours(current_state)
-
-            max_Q = 0 if len(neighbours) == 0 else\
-                max(map(lambda neighbour: self.get_Q(current_state, neighbour[1]), neighbours))
-
+            # Get actions in the new state
+            actions = self.environment.get_actions()
+            best_action = max(actions, lambda action: self.Q[new_state][action])
             # Estimate the new Q-value
-            self.Q[(prev_state, prev_action)] = \
-                self.get_Q(prev_state, prev_action) +\
-                QLearningAgent.learning_rate * self.N_sa[(prev_state, prev_action)] *\
-                (reward_signal + QLearningAgent.discount_factor * max_Q - self.get_Q(prev_state, prev_action))
+            self.Q[state][action] = \
+                self.Q[state][action] + self.learning_rate * self.N_sa[state][action] *\
+                (reward_signal + self.discount_factor * self.Q[new_state][best_action] - self.Q[state][action])
 
 
-    def choose_action(self, state):
-        neighbours = self.get_neighbours(state)
-        if len(neighbours) == 0:
-            return None
-
+    def choose_action(self):
         if random.random() <= self.exploration_prob:
             # Exploration: Choose a random action
-            return random.choice(neighbours)[1]
+            return random.choice(self.environment.get_actions())
         else:
-            # Exploitation: Choose an action with the highest Q-value for
-            # the current state
+            # Exploitation: Choose an action with the highest Q-value for the
+            # current state
+            state = self.environment.get_state()
+            actions = self.environment.get_actions()
             best_action, best_score = None, float("-inf")
-            for _, action in neighbours:
-                score = self.f(self.get_Q(state, action), self.get_N(state, action))
-                if score >= best_score:
-                    best_action, best_score = action, score
+            for action in actions:
+                if self.Q[state][action] >= best_score:
+                    best_action = action
+                    best_score = self.Q[state][action]
             return best_action
 
 
-    def perform_action(self, current_state, action):
-        return current_state | (1 << action) # Inefficent
-
-
-    def get_reward(self, state):
-        wl, skew = solve(self.N, BitTwiddling.get_on_bits(state), self.inputDf)
-        objective = wl + skew
-        return -objective
-
-
     def train(self):
-        for episode in range(QLearningAgent.num_episodes):
+        rewards = []
+        for episode in range(self.num_episodes):
             # Reset the environment
-            state = 0
-            total_reward = 0
+            state = self.environment.reset()
+            episode_reward = 0
 
             while True:
-                action = self.choose_action(state)
-                if action is None: # Terminal state
-                    break
-                new_state = self.perform_action(state, action)
-                reward = self.get_reward(new_state)
+                # Perform epsilon-greedy policy
+                action = self.choose_action()
 
-                self.update_q_table(state, action, new_state, reward)
-                total_reward += reward
+                new_state, reward, done = self.environment.step(action)
+                self.update_q_table(state, action, reward)
+                episode_reward += reward
+
+                if done:
+                    break
 
                 state = new_state
 
@@ -178,30 +142,42 @@ class QLearningAgent:
                 self.exploration_prob * self.exploration_decay
             )
 
+            # print(f"Episode {episode + 1}: {episode_reward}", self.environment.selected_vertices)
+            rewards.append(episode_reward)
+        return rewards
+
+
     def select_best_vertices(self):
-        self.train()
+        import matplotlib.pyplot as plt
 
-        state = 0
+        rewards = self.train()
+        plt.plot(range(1, self.num_episodes + 1), rewards)
+        plt.show()
+
+        self.environment.reset()
+
         vertices = []
-
-        while len(vertices) < self.objectiveN:
-            neighbours = self.get_neighbours(state)
-            best_action, best_Q_value = None, float("-inf")
-            for _, action in neighbours:
-                Q_value = self.get_Q(state, action)
-                if Q_value >= best_Q_value:
-                    best_action, best_Q_value = action, Q_value
-            vertices.append(best_action)
-            state = self.perform_action(state, best_action)
+        while len(vertices) < self.environment.objectiveN:
+            actions = self.environment.get_actions()
+            state = self.environment.get_state()
+            best_action, best_score = None, float("-inf")
+            for action in actions:
+                if self.Q[state][action] >= best_score:
+                    best_action = action
+                    best_score = self.Q[state][action]
+            new_state, _, _ = self.environment.step(best_action)
+            vertices.append(new_state)
 
         return vertices
 
 
 
-# import pandas as pd
-#
-# inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
-#
-#
-# q_agent = QLearningAgent(45, 2, inputDf[inputDf["netIdx"] == 299])
-# print(q_agent.select_best_vertices())
+import pandas as pd
+
+
+inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
+
+
+q_env = QEnvironment(45, 2, inputDf[inputDf["netIdx"] == 299])
+q_agent = QLearningAgent(q_env)
+print(q_agent.select_best_vertices())
