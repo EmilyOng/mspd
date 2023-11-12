@@ -21,7 +21,7 @@ class QEnvironment:
 
 
     def get_state(self):
-        return self.selected_vertices[-1]
+        return tuple(sorted(self.selected_vertices))
 
 
     def get_reward(self):
@@ -68,15 +68,31 @@ class QLearningAgent:
         # Settings
         self.learning_rate = 0.3
         self.discount_factor = 0.5
-        self.visit_threshold = 3
-        self.optimistic_estimate = 1
+        self.visit_threshold = 5
+        self.optimistic_estimate = float("inf")
         self.num_episodes = 100
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
-        self.Q = np.zeros((self.environment.n_states, self.environment.n_actions))
+        self.Q = {}
         # A table of frequencies for state-action pairs, initialy 0
-        self.N_sa = np.zeros((self.environment.n_states, self.environment.n_actions))
+        self.N_sa = {}
+
+
+    def get_Q(self, state, action):
+        key = tuple((state, action))
+        if key not in self.Q:
+            self.Q[key] = 0
+
+        return self.Q[key]
+
+
+    def get_N(self, state, action):
+        key = tuple((state, action))
+        if key not in self.N_sa:
+            self.N_sa[key] = 0
+
+        return self.N_sa[key]
 
 
     def f(self, utility, num_visits): # Exploration function
@@ -89,15 +105,19 @@ class QLearningAgent:
     def update_q_table(self, state, action, new_state, reward_signal):
         # Reference: AIMA 4.0, Page 854 (Q-Learning Agent)
         if state is not None:
-            self.N_sa[state][action] += 1
+            key = tuple((state, action))
+            if key in self.N_sa:
+                self.N_sa[key] += 1
+            else:
+                self.N_sa[key] = 1
 
             # Get actions in the new state
             actions = self.environment.get_actions()
-            best_action = max(actions, key=lambda action: self.Q[new_state][action])
+            best_action = max(actions, key=lambda action: self.get_Q(new_state, action))
             # Estimate the new Q-value
-            self.Q[state][action] = \
-                self.Q[state][action] + self.learning_rate * self.N_sa[state][action] *\
-                (reward_signal + self.discount_factor * self.Q[new_state][best_action] - self.Q[state][action])
+            self.Q[key] = \
+                self.get_Q(state, action) + self.learning_rate * self.get_N(state, action) *\
+                (reward_signal + self.discount_factor * self.get_Q(new_state, best_action) - self.get_Q(state, action))
 
 
     def choose_action(self):
@@ -111,9 +131,10 @@ class QLearningAgent:
             actions = self.environment.get_actions()
             best_action, best_score = None, float("-inf")
             for action in actions:
-                if self.Q[state][action] >= best_score:
+                Q_value = self.get_Q(state, action)
+                if Q_value >= best_score:
                     best_action = action
-                    best_score = self.Q[state][action]
+                    best_score = Q_value
             return best_action
 
 
@@ -156,19 +177,22 @@ class QLearningAgent:
 
         self.environment.reset()
 
-        vertices = []
-        while len(vertices) < self.environment.objectiveN:
+        while True:
             actions = self.environment.get_actions()
             state = self.environment.get_state()
             best_action, best_score = None, float("-inf")
             for action in actions:
-                if self.Q[state][action] >= best_score:
+                Q_value = self.get_Q(state, action)
+                if Q_value >= best_score:
                     best_action = action
-                    best_score = self.Q[state][action]
-            new_state, _, _ = self.environment.step(best_action)
-            vertices.append(new_state)
+                    best_score = Q_value
+            new_state, _, done = self.environment.step(best_action)
+            if done:
+                break
 
-        return vertices
+        selected_vertices = self.environment.selected_vertices[1:]
+        self.environment.reset()
+        return selected_vertices
 
 
 
