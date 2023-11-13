@@ -159,9 +159,10 @@ def steinerize(points, adj_list, parents):
         else:
             points.append(((curr_node[4], curr_node[5]), steiner_node))
 
-        if steiner_node >= N:
-            parents.extend([0 for i in range(steiner_node - N + 1)])
-            adj_list.extend([SortedSet() for i in range(steiner_node - N + 1)])
+        if steiner_node >= len(parents):
+            parents.extend([0 for i in range(steiner_node - len(parents) + 1)])
+            adj_list.extend([SortedSet() for i in range(steiner_node - len(adj_list) + 1)])
+            steiner_nodes.extend([() for i in range(steiner_node - len(steiner_nodes) + 1)])
 
         if a != steiner_node:
             adj_list[curr_node[1]].discard(a)
@@ -331,8 +332,8 @@ def das(source_set, adj_list, parents, N, points): # Detour-Aware Steinerization
 def prim_dijkstra(alpha, points, source_set, nearest_neighbours, T):
     N = len(points)
 
-    keys = [float("inf") if T else 0 for i in range(len(points))]
-    pathlengths = [float("inf") if T else 0 for i in range(len(points))]
+    keys = [float("inf") for i in range(len(points))]
+    pathlengths = [float("inf") for i in range(len(points))]
     parents = [0 for i in range(len(points))]
     visited = [False for i in range(len(points))]
 
@@ -398,25 +399,50 @@ def solve(N, alpha, source_set, input_df):
     X = input_df[[f"x{i}" for i in range(N)]].values[0].tolist()
     Y = input_df[[f"y{i}" for i in range(N)]].values[0].tolist()
 
+    # Calculate the normalized values:
+    # Since alpha = 0 yields a minimum WL tree, the wirelength value is normalized
+    # using the WL found with alpha = 0. Moreover, alpha = 1 yields a minimum
+    # radius tree and because radius and skew are closely related in the problem,
+    # the skew value is normalized using the skew value found with alpha = 1.
+    # Reference https://github.com/TILOS-AI-Institute/Multi-Source-Prim-Dijkstra/blob/main/contest/README.md
+
     points = [((X[i], Y[i]), i) for i in range(N)]
+    n_wl_adj_list, _ = prim_dijkstra(
+        alpha=0,
+        points=points,
+        source_set=[],
+        nearest_neighbours=get_nearest_neighbours(points),
+        T=False
+    )
+    n_wl = calc_wl(n_wl_adj_list, points)
 
-    nearest_neighbours = get_nearest_neighbours(points)
+    points = [((X[i], Y[i]), i) for i in range(N)]
+    n_skew_adj_list, _ = prim_dijkstra(
+        alpha=1,
+        points=points,
+        source_set=[],
+        nearest_neighbours=get_nearest_neighbours(points),
+        T=False
+    )
+    n_skew = calc_skew(n_skew_adj_list, points, N)
 
-    # Calculate the normalized values
-    n_adj_list, n_parents = prim_dijkstra(alpha, points, [], nearest_neighbours, False)
-    n_wl = calc_wl(n_adj_list, points)
-    n_skew = calc_skew(n_adj_list, points, N)
+    points = [((X[i], Y[i]), i) for i in range(N)]
+    adj_list, parents = n_skew_adj_list, _ = prim_dijkstra(
+        alpha=alpha,
+        points=points,
+        source_set=source_set,
+        nearest_neighbours=get_nearest_neighbours(points),
+        T=True
+    )
+    wl = calc_wl(adj_list, points)
+    skew = calc_skew(adj_list, points, N)
 
-    adj_list, parents = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
-    wl = calc_wl(adj_list, points) / n_wl
-    skew = calc_skew(adj_list, points, N) / n_skew
-
-    return wl, skew
+    return wl / n_wl, skew / n_skew
 
 
-import pandas as pd
-
-
-inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
-
-print(solve(45, 0.2, [38, 39], inputDf))
+# import pandas as pd
+#
+# inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
+# inputDf = inputDf.loc[inputDf["netIdx"] == 299]
+#
+# print(solve(45, 0.8, [38, 39], inputDf)) # (1.135676625659051, 0.6484174508126604)
