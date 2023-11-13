@@ -1,5 +1,8 @@
 import random
+from tqdm import tqdm
 from mspd import solve
+
+random.seed(24219284)
 
 
 class QEnvironment:
@@ -11,11 +14,12 @@ class QEnvironment:
         self.objectiveN = objectiveN
         self.inputDf = inputDf
         self.initial_objective = 2
+        self.alpha_values = alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # Complete state formulation consisting of the selected vertices
         # and alpha value for MSPD.
         self.selected_vertices = self.randomize_start_state()
-        self.alpha = 0.1
+        self.alpha = random.choice(self.alpha_values)
 
         self.rewards_store = {}
 
@@ -45,9 +49,11 @@ class QEnvironment:
         # The smaller the better
         objective = wl + skew
         # Rewards improvement in objective scores
-        reward = objective if self.previous_objective is None\
+        improvement_score = objective if self.previous_objective is None\
             else self.previous_objective - objective
         self.previous_objective = objective
+
+        reward = improvement_score
         return reward, -objective
 
 
@@ -63,8 +69,7 @@ class QEnvironment:
                     # Replacing a source vertex
                     actions.append((QEnvironment.ACTION_REPLACE_VERTEX, (replaceable_index, vertex)))
 
-        alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        for alpha_value in alpha_values:
+        for alpha_value in self.alpha_values:
             if alpha_value == self.alpha:
                 continue
             # Modifying alpha values
@@ -74,7 +79,7 @@ class QEnvironment:
 
     def reset(self):
         self.selected_vertices = self.randomize_start_state()
-        self.alpha = 0.1
+        self.alpha = random.choice(self.alpha_values)
 
         self.selectable_vertices = [True for i in range(self.N)]
         self.selectable_vertices[0] = False
@@ -111,17 +116,17 @@ class QLearningAgent:
         # Exploitation vs exploration tradeoff when selecting actions during training.
         self.exploration_prob = 1
         self.exploration_decay = 0.95
-        self.min_exploration_prob = 0.1
+        self.min_exploration_prob = 0.0005
         # Settings
-        self.learning_rate = 0.8
+        self.learning_rate = 0.7
         self.learning_rate_decay = 0.95
-        self.min_learning_rate = 0.02
-        self.discount_factor = 0.9
-        self.visit_threshold = 1
+        self.min_learning_rate = 0.05
+        self.discount_factor = 0.15
+        self.visit_threshold = 2
         self.optimistic_estimate = float("inf")
 
-        self.num_episodes = 300
-        self.num_iterations_per_episode = 50
+        self.num_episodes = 5000
+        self.num_iterations_per_episode = self.environment.N
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
@@ -189,7 +194,7 @@ class QLearningAgent:
 
     def train(self):
         rewards = []
-        for episode in range(self.num_episodes):
+        for episode in tqdm(range(self.num_episodes)):
             # Reset the environment
             state = self.environment.reset()
             episode_reward = 0
@@ -213,8 +218,13 @@ class QLearningAgent:
                 self.learning_rate * self.learning_rate_decay
             )
 
-            print(f"Episode {episode + 1}: {episode_reward}", self.environment.selected_vertices)
+            # print(f"Episode {episode + 1}: {episode_reward}", self.environment.get_state())
             rewards.append(episode_reward)
+
+        with open("rewards.txt", "w") as f:
+            for i in range(len(rewards)):
+                f.write(f"{i}, {rewards[i]}\n")
+
         return rewards
 
 
