@@ -1,3 +1,7 @@
+# Supports logarithmic insertion and deletion
+from sortedcontainers import SortedSet
+
+
 def get_nearest_neighbours(points):
     N = len(points)
 
@@ -8,8 +12,9 @@ def get_nearest_neighbours(points):
 
     nearest_neighbours = [[] for i in range(N)]
 
-    # Sort the points by y-coordinates (point_index = ((x, y), i))
-    sorted_points = sorted(points, key=lambda point_index: point_index[0][1])
+    # Sort the points by y-coordinates (point_index = ((x, y), i)) and tiebreak
+    # by the x-coordinate.
+    sorted_points = sorted(points, key=lambda point_index: (point_index[0][1], point_index[0][0]))
 
     for i in range(N):
         a_index = sorted_points[i][1]
@@ -79,7 +84,7 @@ def calc_skew(adj_list, points, N):
     count = [0 for i in range(len(points))]
     pathlengths = [0 for i in range(len(points))]
 
-    subtree = [set() for i in range(len(points))]
+    subtree = [SortedSet() for i in range(len(points))]
 
     dfs(0, 0, adj_list, points, subtree, count, parent_count, pathlengths)
 
@@ -109,29 +114,30 @@ def steinerize(points, adj_list, parents):
                 if node_b == index or node_a == node_b:
                     continue
 
-            s_x = points[index][0]
-            s_y = points[index][1]
+                s_x = points[index][0][0]
+                s_y = points[index][0][1]
 
-            if min(points[node_a][0], points[node_b][0]) > points[index][0]:
-                s_x = min(points[node_a][0], points[node_b][0])
-            elif max(points[node_a][0], points[node_b][0]) < points[index][0]:
-                s_x = max(points[node_a][0], points[node_b][0])
+                if min(points[node_a][0][0], points[node_b][0][0]) > points[index][0][0]:
+                    s_x = min(points[node_a][0][0], points[node_b][0][0])
+                elif max(points[node_a][0][0], points[node_b][0][0]) < points[index][0][0]:
+                    s_x = max(points[node_a][0][0], points[node_b][0][0])
 
-            if min(points[node_a][1], points[node_b][1]) > points[index][1]:
-                s_y = min(points[node_a][1], points[node_b][1])
-            elif max(points[node_a][1], points[node_b][1]) < points[index][1]:
-                s_y = max(points[node_a][1], points[node_b][1])
+                if min(points[node_a][0][1], points[node_b][0][1]) > points[index][0][1]:
+                    s_y = min(points[node_a][0][1], points[node_b][0][1])
+                elif max(points[node_a][0][1], points[node_b][0][1]) < points[index][0][1]:
+                    s_y = max(points[node_a][0][1], points[node_b][0][1])
 
-            gain = abs(points[index][0] - s_x) + abs(points[index][1] - s_y)
-            if gain > best:
-                best = gain
-                a, b = node_a, node_b
-                b_x, b_y = s_x, s_y
+                gain = abs(points[index][0][0] - s_x) + abs(points[index][0][1] - s_y)
+                if gain > best:
+                    best = gain
+                    a, b = node_a, node_b
+                    b_x, b_y = s_x, s_y
 
-        return (-best, index, a, b, b_x, b_y)
+        return (best, index, a, b, b_x, b_y)
 
 
-    pq = set()
+    pq = SortedSet()
+
     steiner_nodes = [[] for i in range(len(points))]
     for i in range(1, len(points)):
         new_node = best_steiner_node(i)
@@ -139,35 +145,33 @@ def steinerize(points, adj_list, parents):
         steiner_nodes[i] = new_node
 
     while len(pq) > 0:
-        curr_node = next(iter(pq))
-        pq.remove(curr_node)
-
+        curr_node = pq.pop(-1)
         if curr_node[0] == 0:
             break
 
         a, b = curr_node[2], curr_node[3]
-        steiner_node = N
+        steiner_node = len(points)
 
-        if points[a][0] == curr_node[4] and points[a][1] == curr_node[5]:
+        if points[a][0][0] == curr_node[4] and points[a][0][1] == curr_node[5]:
             steiner_node = a
-        elif points[b][0] == curr_node[4] and points[b][1] == curr_node[5]:
+        elif points[b][0][0] == curr_node[4] and points[b][0][1] == curr_node[5]:
             steiner_node = b
         else:
             points.append(((curr_node[4], curr_node[5]), steiner_node))
-            points[steiner_node][0] = curr_node[4]
-            points[steiner_node][1] = curr_node[5]
+
+        if steiner_node >= N:
+            parents.extend([0 for i in range(steiner_node - N + 1)])
+            adj_list.extend([SortedSet() for i in range(steiner_node - N + 1)])
 
         if a != steiner_node:
-            adj_list[curr_node[1]].remove(a)
+            adj_list[curr_node[1]].discard(a)
             adj_list[curr_node[1]].add(steiner_node)
-            parents[steiner_node] = curr_node[1]
             adj_list[steiner_node].add(a)
             parents[a] = steiner_node
             parents[steiner_node] = curr_node[1]
         if b != steiner_node:
-            adj_list[curr_node[1]].remove(b)
+            adj_list[curr_node[1]].discard(b)
             adj_list[curr_node[1]].add(steiner_node)
-            parents[steiner_node] = curr_node[1]
             adj_list[steiner_node].add(b)
             parents[b] = steiner_node
             parents[steiner_node] = curr_node[1]
@@ -185,11 +189,10 @@ def steinerize(points, adj_list, parents):
         pq.add(steiner_nodes[b])
 
 
-
 def das(source_set, adj_list, parents, N, points): # Detour-Aware Steinerization
     nearest_neighbours = get_nearest_neighbours(points)
 
-    subtree = [set() for i in range(len(points))]
+    subtree = [SortedSet() for i in range(len(points))]
 
     parent_count = [0 for i in range(len(points))]
     count = [0 for i in range(len(points))]
@@ -200,19 +203,17 @@ def das(source_set, adj_list, parents, N, points): # Detour-Aware Steinerization
     def get_dt(at, parent):
         DT[at] = pathlengths[at] - manhattan_distance(
             points[at][0][0], points[at][0][1],
-            0, 0
+            points[0][0][0], points[0][0][1]
         )
         for node in adj_list[at]:
-            if node == at:
+            if node == parent:
                 continue
             get_dt(node, at)
 
 
     dfs(0, 0, adj_list, points, subtree, count, parent_count, pathlengths)
 
-    max_pathlength = 0
-    for i in range(N):
-        max_pathlength = max(max_pathlength, pathlengths[i])
+    max_pathlength = max(pathlengths)
 
     for i in range(1, len(points)):
         if i in source_set:
@@ -263,13 +264,10 @@ def das(source_set, adj_list, parents, N, points): # Detour-Aware Steinerization
     get_dt(0, 0)
 
     max_pathlength = 0
-    curr_dt = 0
+    curr_dt = sum(DT)
     curr_wl = calc_wl(adj_list, points)
 
-    for i in range(N):
-        max_pathlength = max(max_pathlength, pathlengths[i])
-    for i in range(len(points)):
-        curr_dt += DT[i]
+    max_pathlength = max(pathlengths)
 
     for i in range(1, len(points)):
         if i in source_set:
@@ -333,8 +331,8 @@ def das(source_set, adj_list, parents, N, points): # Detour-Aware Steinerization
 def prim_dijkstra(alpha, points, source_set, nearest_neighbours, T):
     N = len(points)
 
-    keys = [float("inf") for i in range(len(points))]
-    pathlengths = [float("inf") for i in range(len(points))]
+    keys = [float("inf") if T else 0 for i in range(len(points))]
+    pathlengths = [float("inf") if T else 0 for i in range(len(points))]
     parents = [0 for i in range(len(points))]
     visited = [False for i in range(len(points))]
 
@@ -342,7 +340,7 @@ def prim_dijkstra(alpha, points, source_set, nearest_neighbours, T):
     pathlengths[0] = 0
     parents[0] = 0
 
-    pq = set()
+    pq = SortedSet()
 
     for source in source_set:
         keys[source] = 0
@@ -355,10 +353,8 @@ def prim_dijkstra(alpha, points, source_set, nearest_neighbours, T):
     else:
         visited[0] = True
 
-
     while len(pq) > 0:
-        fr = next(iter(pq))
-        pq.remove(fr)
+        fr = pq.pop(0)
 
         fr_index = fr[1][0]
         fr_pathlength = fr[0][1]
@@ -373,20 +369,20 @@ def prim_dijkstra(alpha, points, source_set, nearest_neighbours, T):
             pathlength = distance + fr_pathlength
             weight = alpha * fr_pathlength + distance
 
-            if not visited[neighbour_index] and weight <= keys[fr_pathlength]:
-                pq.discard((
-                    (keys[neighbour_index], pathlengths[neighbour_index]),
-                    (neighbour_index, parents[neighbour_index])
-                ))
+            if not visited[neighbour_index] and weight <= keys[neighbour_index]:
+                pq.discard(
+                    ((keys[neighbour_index], pathlengths[neighbour_index]),
+                    (neighbour_index, parents[neighbour_index]))
+                )
                 keys[neighbour_index] = weight
                 pathlengths[neighbour_index] = pathlength
                 parents[neighbour_index] = fr_index
-                pq.add((
-                    (keys[neighbour_index], pathlengths[neighbour_index]),
-                    (neighbour_index, parents[neighbour_index])
-                ))
+                pq.add(
+                    ((keys[neighbour_index], pathlengths[neighbour_index]),
+                    (neighbour_index, parents[neighbour_index]))
+                )
 
-    adj_list = [set() for i in range(N)]
+    adj_list = [SortedSet() for i in range(N)]
     for i in range(N):
         adj_list[parents[i]].add(i)
 
@@ -397,7 +393,7 @@ def prim_dijkstra(alpha, points, source_set, nearest_neighbours, T):
     return adj_list, parents
 
 
-def solve(N, source_set, input_df):
+def solve(N, alpha, source_set, input_df):
     # Store the x and y coordinates
     X = input_df[[f"x{i}" for i in range(N)]].values[0].tolist()
     Y = input_df[[f"y{i}" for i in range(N)]].values[0].tolist()
@@ -405,24 +401,22 @@ def solve(N, source_set, input_df):
     points = [((X[i], Y[i]), i) for i in range(N)]
 
     nearest_neighbours = get_nearest_neighbours(points)
-    alpha_values = [0.2, 0.4, 0.6, 0.8]
 
-    best = None
+    # Calculate the normalized values
+    n_adj_list, n_parents = prim_dijkstra(alpha, points, [], nearest_neighbours, False)
+    n_wl = calc_wl(n_adj_list, points)
+    n_skew = calc_skew(n_adj_list, points, N)
 
-    for alpha in alpha_values:
-        # Calculate the normalized values
-        n_adj_list, _ = prim_dijkstra(alpha, points, [], nearest_neighbours, False)
-        n_wl = calc_wl(n_adj_list, points)
-        n_skew = calc_skew(n_adj_list, points, N)
+    adj_list, parents = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
+    wl = calc_wl(adj_list, points) / n_wl
+    skew = calc_skew(adj_list, points, N) / n_skew
 
-        adj_list, _ = prim_dijkstra(alpha, points, source_set, nearest_neighbours, True)
-        wl = calc_wl(adj_list, points) / n_wl
-        skew = calc_skew(adj_list, points, N) / n_skew
+    return wl, skew
 
-        if best is None:
-            best = (wl, skew)
-        else:
-            if wl >= best[0] and skew >= best[1]:
-                best = (wl, skew)
 
-    return best
+import pandas as pd
+
+
+inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
+
+print(solve(45, 0.2, [38, 39], inputDf))
