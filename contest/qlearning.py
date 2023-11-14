@@ -21,7 +21,7 @@ class QEnvironment:
         # Partial state formulation consisting of the selected vertices
         # and alpha value for MSPD.
         self.selected_vertices = []
-        self.alpha = random.choice(self.alpha_values)
+        self.alpha = 0.5 # random.choice(self.alpha_values)
 
         self.objective_store = {}
 
@@ -72,17 +72,17 @@ class QEnvironment:
                 # Add an unselected vertex
                 actions.append((QEnvironment.ACTION_ADD_VERTEX, vertex))
 
-        for alpha_value in self.alpha_values:
-            if alpha_value == self.alpha:
-                continue
-            # Modify alpha values
-            actions.append((QEnvironment.ACTION_MODIFY_ALPHA, alpha_value))
+        # for alpha_value in self.alpha_values:
+        #     if alpha_value == self.alpha:
+        #         continue
+        #     # Modify alpha values
+        #     actions.append((QEnvironment.ACTION_MODIFY_ALPHA, alpha_value))
         return actions
 
 
     def reset(self):
         self.selected_vertices = []
-        self.alpha = random.choice(self.alpha_values)
+        self.alpha = 0.5 # random.choice(self.alpha_values)
 
         self.selectable_vertices = [True for i in range(self.N)]
         self.selectable_vertices[0] = False
@@ -125,8 +125,8 @@ class QLearningAgent:
         self.visit_threshold = 2
         self.optimistic_estimate = float("inf")
 
-        self.num_episodes = 200
-        self.num_local_search_iterations = 10
+        self.num_episodes = 400
+        self.num_local_search_iterations = 100
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
@@ -281,7 +281,6 @@ class QLearningAgent:
 
             # print(f"Episode {episode + 1}: {episode_reward}", self.environment.get_state())
             rewards.append(episode_reward)
-
         # with open("rewards.txt", "w") as f:
         #     for i in range(len(rewards)):
         #         f.write(f"{i}, {rewards[i]}\n")
