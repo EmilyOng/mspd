@@ -11,9 +11,10 @@ random.seed(24219284)
 # Skips the timer
 TIMER_OVERRIDE = False
 
-
 class QEnvironment:
     ACTION_ADD_VERTEX = 'action_add_vertex'
+    ACTION_REPLACE_VERTEX = 'action_replace_vertex'
+    ACTION_REMOVE_VERTEX = 'action_remove_vertex'
     ACTION_MODIFY_ALPHA = 'action_modify_alpha'
 
     def __init__(self, N, objectiveN, inputDf):
@@ -21,6 +22,8 @@ class QEnvironment:
         self.objectiveN = objectiveN
         self.inputDf = inputDf
         self.alpha_values = alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+        self.visited_states = {}
 
         # Partial state formulation consisting of the selected vertices
         # and alpha value for MSPD.
@@ -50,20 +53,22 @@ class QEnvironment:
             wl, skew = solve(self.N, alpha, selected_vertices, self.inputDf)
             self.objective_store[state] = wl, skew
 
-        return wl, skew
+        objective = wl + skew if self.objectiveN == 1\
+            else 3 * wl + skew if self.objectiveN == 2\
+            else wl + 3 * skew
+        return wl, skew, objective
 
 
     def get_reward(self):
         current_state = self.get_state()
-        wl, skew = self.compute_objective_score(self.alpha, self.selected_vertices)
+        wl, skew, objective = self.compute_objective_score(self.alpha, self.selected_vertices)
 
-        # The smaller the (wl + skew) value the better
-        objective = wl + skew
+        # The smaller the objective value the better
         reward = objective if self.previous_objective is None\
             else self.previous_objective - objective
         self.previous_objective = objective
 
-        return reward, wl + skew
+        return reward, objective
 
 
     def get_actions(self):
@@ -74,7 +79,16 @@ class QEnvironment:
         for vertex in range(self.N):
             if self.selectable_vertices[vertex]:
                 # Add an unselected vertex
-                actions.append((QEnvironment.ACTION_ADD_VERTEX, vertex))
+                if len(self.selected_vertices) < 3:
+                    actions.append((QEnvironment.ACTION_ADD_VERTEX, vertex))
+
+                if len(self.selected_vertices) > 0:
+                    for i in range(len(self.selected_vertices)):
+                        actions.append((QEnvironment.ACTION_REPLACE_VERTEX, (i, vertex)))
+
+        if len(self.selected_vertices) > 1:
+            for i in range(len(self.selected_vertices)):
+                actions.append((QEnvironment.ACTION_REMOVE_VERTEX, i))
 
         # for alpha_value in self.alpha_values:
         #     if alpha_value == self.alpha:
@@ -88,6 +102,8 @@ class QEnvironment:
         self.selected_vertices = []
         self.alpha = 0.5 # random.choice(self.alpha_values)
 
+        self.visited_states = {}
+
         self.selectable_vertices = [True for i in range(self.N)]
         self.selectable_vertices[0] = False
         self.previous_objective = None
@@ -96,20 +112,31 @@ class QEnvironment:
 
 
     def step(self, action):
+        initial_state = self.get_state()
         action_type, info = action
         if action_type == QEnvironment.ACTION_ADD_VERTEX:
             # Add an unselected vertex
             self.selected_vertices.append(info)
             self.selectable_vertices[info] = False
+        elif action_type == QEnvironment.ACTION_REPLACE_VERTEX:
+            # Replace with an unselected vertex
+            index_to_replace, new_vertex = info
+            self.selectable_vertices[self.selected_vertices[index_to_replace]] = True
+            self.selectable_vertices[new_vertex] = False
+            self.selected_vertices[index_to_replace] = new_vertex
+        elif action_type == QEnvironment.ACTION_REMOVE_VERTEX:
+            # Remove a vertex
+            self.selectable_vertices[self.selected_vertices[info]] = True
+            self.selected_vertices.pop(info)
         elif action_type == QEnvironment.ACTION_MODIFY_ALPHA:
             self.alpha = info
+
+        self.visited_states[(initial_state, action)] = True
 
         new_state = self.get_state()
         reward, _ = self.get_reward()
 
-        done = len(self.selected_vertices) == self.objectiveN
-
-        return new_state, reward, done
+        return new_state, reward
 
 
 
@@ -119,8 +146,8 @@ class QLearningAgent:
 
         # Exploitation vs exploration tradeoff when selecting actions during training.
         self.exploration_prob = 1
-        self.exploration_decay = 0.95
-        self.min_exploration_prob = 0.0005
+        self.exploration_decay = 0.98
+        self.min_exploration_prob = 0.1
         # Settings
         self.learning_rate = 0.7
         self.learning_rate_decay = 0.95
@@ -129,8 +156,8 @@ class QLearningAgent:
         self.visit_threshold = 2
         self.optimistic_estimate = float("inf")
 
-        self.num_episodes = 400
-        self.num_local_search_iterations = 100
+        self.num_episodes = 50
+        self.max_iterations_per_episode = 5
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
@@ -190,7 +217,7 @@ class QLearningAgent:
             best_action, best_score = None, float("-inf")
             for action in actions:
                 Q_value = self.get_Q(state, action)
-                if Q_value >= best_score:
+                if Q_value >= best_score and (state, action) not in self.environment.visited_states:
                     best_action = action
                     best_score = Q_value
             return best_action
@@ -199,11 +226,14 @@ class QLearningAgent:
     def local_search(
         self,
         initial_state,
+        num_iterations=20,
         initial_time=None,
         max_elapsed=float("inf")
     ):
         state = initial_state
-        best_state, best_objective = None, float("inf")
+
+        best_state = state
+        _, _, best_objective = self.environment.compute_objective_score(self.environment.alpha, state[0])
 
         selectable_vertices = [True for i in range(self.environment.N)]
         # Root vertex is unselectable
@@ -216,9 +246,9 @@ class QLearningAgent:
         max_temperature = 10
         temperature_decay = 0.95
 
-        temperature_schedule = lambda time: max_temperature * (alpha ** time)
+        temperature_schedule = lambda time: max_temperature * (temperature_decay ** time)
 
-        for i in range(self.num_local_search_iterations):
+        for i in range(num_iterations):
             selected_vertices, alpha = state
             # Pick a random action
             replace_index = random.choice(range(len(selected_vertices)))
@@ -227,20 +257,19 @@ class QLearningAgent:
             current_temperature = temperature_schedule(i)
 
             # Compute the scores of the current and next state
-            curr_wl, curr_skew = self.environment.compute_objective_score(alpha, selected_vertices)
+            curr_wl, curr_skew, curr_objective = self.environment.compute_objective_score(alpha, selected_vertices)
 
             new_selected_vertices = [x for x in selected_vertices]
             new_selected_vertices[replace_index] = vertex
-            next_wl, next_skew = self.environment.compute_objective_score(alpha, new_selected_vertices)
+            next_wl, next_skew, next_objective = self.environment.compute_objective_score(alpha, new_selected_vertices)
 
-            improvement = (curr_wl + curr_skew) - (next_wl + next_skew)
+            improvement = curr_objective - next_objective
             if improvement > 0 or random.random() >= math.exp(improvement / current_temperature):
                 state = (new_selected_vertices, alpha)
                 selectable_vertices[vertex] = False
                 selectable_vertices[selected_vertices[replace_index]] = True
 
-            wl, skew = self.environment.compute_objective_score(state[1], state[0])
-            curr_objective = wl + skew
+            wl, skew, curr_objective = self.environment.compute_objective_score(state[1], state[0])
             if best_state is None or curr_objective < best_objective:
                 best_state, best_objective = state, curr_objective
 
@@ -263,13 +292,12 @@ class QLearningAgent:
             # Reset the environment
             state = self.environment.reset()
             episode_reward = 0
-            done = False
 
-            while not done:
+            for _ in range(self.max_iterations_per_episode):
                 # Perform epsilon-greedy policy
                 action = self.choose_action(eps_greedy=eps_greedy)
 
-                new_state, reward, done = self.environment.step(action)
+                new_state, reward = self.environment.step(action)
 
                 reward_signal = reward
 
@@ -278,11 +306,9 @@ class QLearningAgent:
                     # Take the inverse because the local search procedure returns
                     # the objective score which we want to minimize.
                     reward_shaping_curr = 0 if len(state[0]) == 0 else\
-                        (1 / self.local_search(state)[1]) *\
-                        (len(state[0]) / self.environment.objectiveN)
+                        (1 / self.local_search(state, num_iterations=10)[1])
                     reward_shaping_new = 0 if len(new_state[0]) == 0 else\
-                        (1 / self.local_search(new_state)[1]) *\
-                        (len(new_state[0]) / self.environment.objectiveN)
+                        (1 / self.local_search(new_state, num_iterations=10)[1])
                     # Reward shaping
                     reward_signal += self.discount_factor * reward_shaping_new - reward_shaping_curr
 
@@ -327,7 +353,7 @@ class QLearningAgent:
             reward_shaping=reward_shaping,
             eps_greedy=eps_greedy,
             initial_time=curr_time,
-            max_elapsed=6.0 if refine_soln else 9.8
+            max_elapsed=5.2 if refine_soln else 9.8
         )
 
         # import matplotlib.pyplot as plt
@@ -335,23 +361,22 @@ class QLearningAgent:
         # plt.show()
 
         self.environment.reset()
-        done = False
-        while not done:
+        for _ in range(self.max_iterations_per_episode):
             action = self.choose_action(eps_greedy=False)
-            _, _, done = self.environment.step(action)
+            new_state, _ = self.environment.step(action)
 
         initial_state, alpha = self.environment.get_state()
-
         if refine_soln:
             curr_time=time.time()
-            state, score = self.local_search((
-                initial_state,
-                alpha
-            ), initial_time=curr_time, max_elapsed=3.8)
-            return tuple(state[0])
+            state, score = self.local_search(
+                (initial_state, alpha),
+                num_iterations=20,
+                initial_time=curr_time,
+                max_elapsed=4.7
+            )
+            return state[0]
         else:
             return initial_state
-
 
 
 # Test program
@@ -360,7 +385,7 @@ class QLearningAgent:
 # inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
 # inputDf = inputDf[inputDf["netIdx"] == 299]
 #
-# q_env = QEnvironment(45, 2, inputDf)
+# q_env = QEnvironment(45, 1, inputDf)
 # q_agent = QLearningAgent(q_env)
 # vertices = q_agent.select_best_vertices(reward_shaping=True, eps_greedy=True, refine_soln=True)
 # print(vertices)
