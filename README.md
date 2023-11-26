@@ -1,6 +1,5 @@
 <h1 align="center">Multi-Source Prim-Dijkstra</h1>
 <p align="center"><img src="images/mspd_tree.png" width="80%"/></p>
-<div align="center">
 
 
 This repository contains the work for the Multi-Source Prim-Dijkstra contest "entry". In the `contest` [folder](https://github.com/EmilyOng/mspd/tree/main/contest):
