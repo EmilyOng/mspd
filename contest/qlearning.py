@@ -9,7 +9,7 @@ from mspd import solve
 random.seed(24219284)
 
 # Skips the timer
-TIMER_OVERRIDE = False
+TIMER_OVERRIDE = True
 
 class QEnvironment:
     ACTION_ADD_VERTEX = 'action_add_vertex'
@@ -156,8 +156,8 @@ class QLearningAgent:
         self.visit_threshold = 2
         self.optimistic_estimate = float("inf")
 
-        self.num_episodes = 50
-        self.max_iterations_per_episode = 5
+        self.num_episodes = 5000
+        self.max_iterations_per_episode = 10
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
@@ -356,9 +356,13 @@ class QLearningAgent:
             max_elapsed=5.2 if refine_soln else 9.8
         )
 
-        # import matplotlib.pyplot as plt
-        # plt.scatter(range(1, self.num_episodes + 1), rewards)
-        # plt.show()
+        import matplotlib.pyplot as plt
+        plt.scatter(range(1, self.num_episodes + 1), rewards)
+        plt.show()
+
+        with open("rewards.txt", "w") as f:
+            for i in range(len(rewards)):
+                f.write(f"{i}, {rewards[i]}\n")
 
         self.environment.reset()
         for _ in range(self.max_iterations_per_episode):
@@ -380,12 +384,12 @@ class QLearningAgent:
 
 
 # Test program
-# import pandas as pd
-#
-# inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
-# inputDf = inputDf[inputDf["netIdx"] == 299]
-#
-# q_env = QEnvironment(45, 1, inputDf)
-# q_agent = QLearningAgent(q_env)
-# vertices = q_agent.select_best_vertices(reward_shaping=True, eps_greedy=True, refine_soln=True)
-# print(vertices)
+import pandas as pd
+
+inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
+inputDf = inputDf[inputDf["netIdx"] == 299]
+
+q_env = QEnvironment(45, 1, inputDf)
+q_agent = QLearningAgent(q_env)
+vertices = q_agent.select_best_vertices(reward_shaping=False, eps_greedy=False, refine_soln=True)
+print(vertices)

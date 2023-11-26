@@ -3,7 +3,6 @@ import random
 import signal
 from sklearn.metrics import mean_squared_error
 
-from genetic import GeneticAgent
 from qlearning import QEnvironment, QLearningAgent
 
 # contestants are only allowed to modify the following function!
@@ -30,12 +29,9 @@ def Inference(N, objectiveN, inputDf):
     # Note that the root of the input net (always index 0) cannot be a source
     # please return index between 1 and N-1
 
-    # TODO: Handle timeouts
-    # genetic_agent = GeneticAgent(N, objectiveN, inputDf)
-    # return genetic_agent.select_best_vertices()
     q_env = QEnvironment(N, objectiveN, inputDf)
     q_agent = QLearningAgent(q_env)
-    return q_agent.select_best_vertices()
+    return q_agent.select_best_vertices(reward_shaping=True, eps_greedy=True, refine_soln=True)
 
 
 ######### DO NOT MODIFY FROM HERE ONWARD ############
@@ -74,11 +70,11 @@ def GetResultIdx(resultIdxList, sourceDf):
 # signal setup for maximum runtime limit
 signal.signal(signal.SIGALRM, Handler)
 
-listK = [1, 1, 1]#, 1, 2, 2, 2]
+listK = [1, 1, 1, 1, 2, 2, 2]
 MSEs = []
 
 # for various N
-for n in [10, 15, 25]:#, 30, 40, 45, 50]:
+for n in [10, 15, 25, 30, 40, 45, 50]:
     dataObjDf = pd.read_csv(
         "testcases/data_obj_stt_%d.csv.gz" % (n), compression="gzip"
     )

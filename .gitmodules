@@ -1,0 +1,3 @@
+[submodule "Multi-Source-Prim-Dijkstra"]
+	path = Multi-Source-Prim-Dijkstra
+	url = https://github.com/TILOS-AI-Institute/Multi-Source-Prim-Dijkstra
