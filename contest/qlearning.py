@@ -1,11 +1,15 @@
 import random
 import math
+import time
 
 from tqdm import tqdm
 from mspd import solve
 
 
 random.seed(24219284)
+
+# Skips the timer
+TIMER_OVERRIDE = False
 
 
 class QEnvironment:
@@ -174,8 +178,8 @@ class QLearningAgent:
                 (reward_signal + self.discount_factor * self.get_Q(new_state, best_action) - self.get_Q(state, action))
 
 
-    def choose_action(self, greedy=False):
-        if not greedy and random.random() <= self.exploration_prob:
+    def choose_action(self, eps_greedy=True):
+        if eps_greedy and random.random() <= self.exploration_prob:
             # Exploration: Choose a random action
             return random.choice(self.environment.get_actions())
         else:
@@ -192,7 +196,12 @@ class QLearningAgent:
             return best_action
 
 
-    def local_search(self, initial_state):
+    def local_search(
+        self,
+        initial_state,
+        initial_time=None,
+        max_elapsed=float("inf")
+    ):
         state = initial_state
         best_state, best_objective = None, float("inf")
 
@@ -235,10 +244,20 @@ class QLearningAgent:
             if best_state is None or curr_objective < best_objective:
                 best_state, best_objective = state, curr_objective
 
+            # Estimated time check
+            if not TIMER_OVERRIDE and initial_time is not None and time.time() - initial_time >= max_elapsed:
+                break
+
         return best_state, best_objective
 
 
-    def train(self):
+    def train(
+        self,
+        reward_shaping=True,
+        eps_greedy=True,
+        initial_time=None,
+        max_elapsed=float("inf")
+    ):
         rewards = []
         for episode in range(self.num_episodes):
             # Reset the environment
@@ -248,22 +267,24 @@ class QLearningAgent:
 
             while not done:
                 # Perform epsilon-greedy policy
-                action = self.choose_action()
+                action = self.choose_action(eps_greedy=eps_greedy)
 
                 new_state, reward, done = self.environment.step(action)
 
                 reward_signal = reward
-                # Perform local search (the higher the reward, the better).
-                # Take the inverse because the local search procedure returns
-                # the objective score which we want to minimize.
-                reward_shaping_curr = 0 if len(state[0]) == 0 else\
-                    (1 / self.local_search(state)[1]) *\
-                    (len(state[0]) / self.environment.objectiveN)
-                reward_shaping_new = 0 if len(new_state[0]) == 0 else\
-                    (1 / self.local_search(new_state)[1]) *\
-                    (len(new_state[0]) / self.environment.objectiveN)
-                # Reward shaping
-                reward_signal += self.discount_factor * reward_shaping_new - reward_shaping_curr
+
+                if reward_shaping:
+                    # Perform local search (the higher the reward, the better).
+                    # Take the inverse because the local search procedure returns
+                    # the objective score which we want to minimize.
+                    reward_shaping_curr = 0 if len(state[0]) == 0 else\
+                        (1 / self.local_search(state)[1]) *\
+                        (len(state[0]) / self.environment.objectiveN)
+                    reward_shaping_new = 0 if len(new_state[0]) == 0 else\
+                        (1 / self.local_search(new_state)[1]) *\
+                        (len(new_state[0]) / self.environment.objectiveN)
+                    # Reward shaping
+                    reward_signal += self.discount_factor * reward_shaping_new - reward_shaping_curr
 
                 self.update_q_table(state, action, new_state, reward_signal)
                 episode_reward += reward_signal
@@ -281,38 +302,65 @@ class QLearningAgent:
 
             # print(f"Episode {episode + 1}: {episode_reward}", self.environment.get_state())
             rewards.append(episode_reward)
-        # with open("rewards.txt", "w") as f:
-        #     for i in range(len(rewards)):
-        #         f.write(f"{i}, {rewards[i]}\n")
+
+            # Estimated time check
+            if not TIMER_OVERRIDE and initial_time is not None and time.time() - initial_time >= max_elapsed:
+                break
 
         return rewards
 
 
-    def select_best_vertices(self):
-        # import matplotlib.pyplot as plt
+    def select_best_vertices(
+        self,
+        # Whether to include reward shaping during training
+        reward_shaping=True,
+        # Whether to include epsilon greedy during training
+        eps_greedy=True,
+        # Whether to refine solution from RL with local search
+        refine_soln=True
+    ):
 
-        rewards = self.train()
+        # The time check is given to be lax since it is not refined.
+
+        curr_time = time.time()
+        rewards = self.train(
+            reward_shaping=reward_shaping,
+            eps_greedy=eps_greedy,
+            initial_time=curr_time,
+            max_elapsed=6.0 if refine_soln else 9.8
+        )
+
+        # import matplotlib.pyplot as plt
         # plt.scatter(range(1, self.num_episodes + 1), rewards)
         # plt.show()
 
         self.environment.reset()
         done = False
         while not done:
-            action = self.choose_action(greedy=True)
+            action = self.choose_action(eps_greedy=False)
             _, _, done = self.environment.step(action)
 
         initial_state, alpha = self.environment.get_state()
-        state, score = self.local_search((initial_state, alpha))
 
-        return state[0]
+        if refine_soln:
+            curr_time=time.time()
+            state, score = self.local_search((
+                initial_state,
+                alpha
+            ), initial_time=curr_time, max_elapsed=3.8)
+            return tuple(state[0])
+        else:
+            return initial_state
 
 
+
+# Test program
 # import pandas as pd
-#
 #
 # inputDf = pd.read_csv("testcases/input_stt_45.csv.gz", compression="gzip")
 # inputDf = inputDf[inputDf["netIdx"] == 299]
 #
 # q_env = QEnvironment(45, 2, inputDf)
 # q_agent = QLearningAgent(q_env)
-# print(q_agent.select_best_vertices())
+# vertices = q_agent.select_best_vertices(reward_shaping=True, eps_greedy=True, refine_soln=True)
+# print(vertices)
