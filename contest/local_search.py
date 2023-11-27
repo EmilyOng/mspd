@@ -134,7 +134,7 @@ class LocalSearchAgent:
 
 
     def select_best_vertices(self):
-        best_state, best_objective = self.search(initial_time=time.time(), max_elapsed=9.8)
+        best_state, best_objective = self.search(initial_time=time.time(), max_elapsed=9.5)
         return best_state[0]
 
 

@@ -4,6 +4,7 @@ import signal
 from sklearn.metrics import mean_squared_error
 
 from qlearning import QEnvironment, QLearningAgent
+from local_search import LocalSearchAgent
 
 # contestants are only allowed to modify the following function!
 # input: a) number of coordinates(N: 10, 15, 20, ... 50),
@@ -29,9 +30,12 @@ def Inference(N, objectiveN, inputDf):
     # Note that the root of the input net (always index 0) cannot be a source
     # please return index between 1 and N-1
 
-    q_env = QEnvironment(N, objectiveN, inputDf)
-    q_agent = QLearningAgent(q_env)
-    return q_agent.select_best_vertices(reward_shaping=True, eps_greedy=True, refine_soln=True)
+    ls_agent = LocalSearchAgent(N, objectiveN, inputDf)
+    return ls_agent.select_best_vertices()
+
+    # q_env = QEnvironment(N, objectiveN, inputDf)
+    # q_agent = QLearningAgent(q_env)
+    # return q_agent.select_best_vertices(reward_shaping=True, eps_greedy=True, refine_soln=False)
 
 
 ######### DO NOT MODIFY FROM HERE ONWARD ############
@@ -101,6 +105,7 @@ for n in [10, 15, 25, 30, 40, 45, 50]:
             try:
                 resultIdxList = Inference(n, objectiveN, netInputDf)
             except Exception as e:
+                print(e)
                 print("Warning: Runtime Limit Exceeded. Penalty will be applied")
                 isFailed = True
 

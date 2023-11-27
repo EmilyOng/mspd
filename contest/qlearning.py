@@ -21,7 +21,7 @@ class QEnvironment:
         self.N = N
         self.objectiveN = objectiveN
         self.inputDf = inputDf
-        self.alpha_values = alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        self.alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         self.visited_states = {}
 
@@ -72,9 +72,6 @@ class QEnvironment:
 
 
     def get_actions(self):
-        # Actions include adding an unselected vertex to the source set, or
-        # changing the alpha values.
-
         actions = []
         for vertex in range(self.N):
             if self.selectable_vertices[vertex]:
@@ -83,11 +80,13 @@ class QEnvironment:
                     actions.append((QEnvironment.ACTION_ADD_VERTEX, vertex))
 
                 if len(self.selected_vertices) > 0:
+                    # Replacing a vertex
                     for i in range(len(self.selected_vertices)):
                         actions.append((QEnvironment.ACTION_REPLACE_VERTEX, (i, vertex)))
 
         if len(self.selected_vertices) > 1:
             for i in range(len(self.selected_vertices)):
+                # Removing a vertex
                 actions.append((QEnvironment.ACTION_REMOVE_VERTEX, i))
 
         # for alpha_value in self.alpha_values:
@@ -156,8 +155,8 @@ class QLearningAgent:
         self.visit_threshold = 2
         self.optimistic_estimate = float("inf")
 
-        self.num_episodes = 50
-        self.max_iterations_per_episode = 5
+        self.num_episodes = 300
+        self.max_iterations_per_episode = 50
 
         # Q(s, a) is the expected total discounted reward if the agent takes action
         # a in state s and acts optimally after. Initially 0.
